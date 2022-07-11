@@ -1,14 +1,14 @@
-from operator import mod
 import os
+import time
 import pandas as pd
+
 import torch
+import torch.nn as nn
 from torchvision import models
 from torchvision import transforms
 from torch.utils.data import Dataset
 from torchvision.io import read_image
 from torch.utils.data import DataLoader
-import torch.nn as nn
-import time
 
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
@@ -31,16 +31,6 @@ class CustomImageDataset(Dataset):
         if self.transform:
             image = self.transform(image)
         return image, label
-
-
-transform = transforms.Compose(
-    [
-        transforms.ToPILImage(),
-        transforms.Resize((224, 224)),
-        transforms.ToTensor(),
-        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-    ]
-)
 
 
 class EmbedModel(nn.Module):
@@ -73,13 +63,22 @@ class EmbedModel(nn.Module):
         return None
 
 
+transform = transforms.Compose(
+    [
+        transforms.ToPILImage(),
+        transforms.Resize((224, 224)),
+        transforms.ToTensor(),
+        transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+    ]
+)
+
 image_dir = "./sample_images/0"
 dataset = CustomImageDataset(img_dir=image_dir, transform=transform)
-train_dataloader = DataLoader(dataset, batch_size=200, shuffle=True)
+train_dataloader = DataLoader(dataset, batch_size=200)
 
 model = EmbedModel()
 if torch.cuda.device_count() > 1:
-    print("Let's use", torch.cuda.device_count(), "GPUs!")
+    print(torch.cuda.device_count(), "GPUs in use!")
     model = nn.DataParallel(model)
 
 model.to(device)
@@ -89,4 +88,4 @@ for inputs, _ in train_dataloader:
     inputs = inputs.to(device)
     embeddings = model(inputs)
 
-print(time.time() - start)
+print('Time: ', time.time() - start)
