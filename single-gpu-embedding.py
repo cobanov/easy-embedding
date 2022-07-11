@@ -1,25 +1,42 @@
-from operator import mod
 import os
+import time
 import pandas as pd
+
 import torch
+import torch.nn as nn
 from torchvision import models
 from torchvision import transforms
 from torch.utils.data import Dataset
 from torchvision.io import read_image
 from torch.utils.data import DataLoader
-import time
+
+device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 
-class EmbedModel:
-    def __init__(self, device="cpu", layer_output_size=512) -> None:
+class CustomImageDataset(Dataset):
+    def __init__(self, img_dir, transform):
+        self.img_labels = pd.DataFrame(os.listdir(img_dir))
+        self.img_labels["class"] = 0
+        self.img_dir = img_dir
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.img_labels)
+
+    def __getitem__(self, idx):
+        img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
+        image = read_image(img_path)
+        label = self.img_labels.iloc[idx, 1]
+        if self.transform:
+            image = self.transform(image)
+        return image, label
+
+
+class EmbedModel(nn.Module):
+    def __init__(self, layer_output_size=512) -> None:
+        super().__init__()
         self.model, self.extraction_layer = self._get_model_and_layer()
         self.layer_output_size = layer_output_size
-        self.scaler = transforms.Resize((224, 224))
-        self.normalize = transforms.Normalize(
-            mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
-        )
-        self.to_tensor = transforms.ToTensor()
-        self.device = device
         self.model.eval()
 
     def _get_model_and_layer(self):
@@ -40,25 +57,6 @@ class EmbedModel:
         return my_embedding.numpy()[:, :, 0, 0]
 
 
-class CustomImageDataset(Dataset):
-    def __init__(self, img_dir, transform=None):
-        self.img_labels = pd.DataFrame(os.listdir(img_dir))
-        self.img_labels["class"] = 0
-        self.img_dir = img_dir
-        self.transform = transform
-
-    def __len__(self):
-        return len(self.img_labels)
-
-    def __getitem__(self, idx):
-        img_path = os.path.join(self.img_dir, self.img_labels.iloc[idx, 0])
-        image = read_image(img_path)
-        label = self.img_labels.iloc[idx, 1]
-        if self.transform:
-            image = self.transform(image)
-        return image, label
-
-
 transform = transforms.Compose(
     [
         transforms.ToPILImage(),
@@ -71,10 +69,11 @@ transform = transforms.Compose(
 
 image_dir = "./sample_images/0"
 dataset = CustomImageDataset(img_dir=image_dir, transform=transform)
-train_dataloader = DataLoader(dataset, batch_size=500, shuffle=True)
+train_dataloader = DataLoader(dataset, batch_size=200)
 
 model = EmbedModel()
 start = time.time()
+
 for inputs, labels in train_dataloader:
     embeddings = model.get_vec(inputs)
     inputs, labels = inputs.to("cuda:0"), labels.to("cuda:0")
@@ -82,4 +81,4 @@ for inputs, labels in train_dataloader:
         "./embeddings.csv", index=False, mode="a", header=None
     )
 
-print(time.time() - start)
+print("Time: ", time.time() - start)
